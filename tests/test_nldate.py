@@ -12,7 +12,7 @@ from nldate import parse
         ("tomorrow", date(2024, 1, 1), date(2024, 1, 2)),
         ("2 weeks from now", date(2024, 1, 1), date(2024, 1, 15)),
         ("1 year and 2 months after yesterday", date(2024, 3, 1), date(2025, 5, 1)),
-        ("next Tuesday", date(2024, 5, 20), date(2024, 5, 28)),
+	("next Tuesday", date(2024, 5, 20), date(2024, 5, 28)),
         ("3 days ago", date(2024, 5, 20), date(2024, 5, 17)),
         ("in 10 days", date(2024, 1, 1), date(2024, 1, 11)),
         ("Jan 1st 2026", None, date(2026, 1, 1)),
