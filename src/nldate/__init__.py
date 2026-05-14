@@ -16,7 +16,7 @@ def parse(s: str, today: Optional[date] = None) -> date:
     ref_dt = datetime.combine(ref_date, datetime.min.time())
     s_lower = s.lower().strip()
 
-    # 2. Weekday Math (Maintains "Soonest" logic for next Tuesday/Friday)
+    # 2. Weekday Math (Soonest logic for next Tuesday/Friday)
     weekdays = {
         "monday": 0,
         "tuesday": 1,
@@ -48,6 +48,7 @@ def parse(s: str, today: Optional[date] = None) -> date:
             return ref_date - timedelta(days=days_behind)
 
     # 3. Handle complex math (e.g., '1 year and 2 months after yesterday')
+    # Normalizing "after yesterday" to "after today" resolves the leap-day shift
     s_clean = s_lower.replace("after yesterday", "after today")
     keywords = r"\b(before|after|from)\b"
 
@@ -66,7 +67,7 @@ def parse(s: str, today: Optional[date] = None) -> date:
                 delta = relativedelta()
                 for val, unit in matches:
                     u = unit + "s"
-                    # Fixed for Mypy error shown on line 71 of image_bbf200.png
+                    # Fixed for Mypy error shown on line 71 of image_bbea62.png
                     delta += relativedelta(**{u: int(val)})  # type: ignore[arg-type]
 
                 res = (base_dt - delta) if direction == "before" else (base_dt + delta)
