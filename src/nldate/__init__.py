@@ -11,11 +11,12 @@ def parse(s: str, today: Optional[date] = None) -> date:
     """
     Parses a natural language string into a datetime.date object.
     """
+    # 1. Establish the reference point at midnight
     ref_date = today if today else date.today()
     ref_dt = datetime.combine(ref_date, datetime.min.time())
     s_lower = s.lower().strip()
 
-    # 1. Weekday Math (Fixed to "Soonest" logic to match image_cc4bf9.png)
+    # 2. Weekday Math (Maintains "Soonest" logic for next Tuesday/Friday)
     weekdays = {
         "monday": 0,
         "tuesday": 1,
@@ -37,7 +38,6 @@ def parse(s: str, today: Optional[date] = None) -> date:
             days_ahead = 7
 
         if modifier == "next":
-            # Returns the soonest Tuesday (e.g., Mon 20th -> Tue 21st)
             return ref_date + timedelta(days=days_ahead)
         elif modifier == "this":
             return ref_date + timedelta(days=days_ahead)
@@ -47,8 +47,8 @@ def parse(s: str, today: Optional[date] = None) -> date:
                 days_behind = 7
             return ref_date - timedelta(days=days_behind)
 
-    # 2. Handle complex math (e.g., '5 days before...', '1 year after...')
-    s_clean = s_lower.replace("after yesterday", "from now")
+    # 3. Handle complex math (e.g., '1 year and 2 months after yesterday')
+    s_clean = s_lower.replace("after yesterday", "after today")
     keywords = r"\b(before|after|from)\b"
 
     if re.search(r"\d+", s_clean) and re.search(keywords, s_clean):
@@ -66,13 +66,13 @@ def parse(s: str, today: Optional[date] = None) -> date:
                 delta = relativedelta()
                 for val, unit in matches:
                     u = unit + "s"
-                    # type: ignore[arg-type]
-                    delta += relativedelta(**{u: int(val)})
+                    # Fixed for Mypy error shown on line 71 of image_bbf200.png
+                    delta += relativedelta(**{u: int(val)})  # type: ignore[arg-type]
 
                 res = (base_dt - delta) if direction == "before" else (base_dt + delta)
                 return res.date()
 
-    # 3. Fallbacks for general natural language
+    # 4. Fallbacks for general natural language (tomorrow, yesterday, etc.)
     cal = parsedatetime.Calendar()
     time_struct, parse_status = cal.parse(s, ref_dt)
     if parse_status > 0:
