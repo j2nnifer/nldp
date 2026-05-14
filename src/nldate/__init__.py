@@ -1,9 +1,11 @@
 import re
 from datetime import date, datetime, timedelta
 from typing import Optional
+
 import dateparser
-from dateutil.relativedelta import relativedelta
 import parsedatetime
+from dateutil.relativedelta import relativedelta
+
 
 def parse(s: str, today: Optional[date] = None) -> date:
     """
@@ -13,7 +15,8 @@ def parse(s: str, today: Optional[date] = None) -> date:
     ref_date = today if today else date.today()
     ref_dt = datetime.combine(ref_date, datetime.min.time())
 
-    # 2. Explicitly handle 'next [weekday]' to avoid library ambiguity
+    # 2. Explicitly handle weekdays to ensure "soonest" day logic
+    # This fixes the failure seen in image_cc4bf9.png
     weekdays = {
         "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
         "friday": 4, "saturday": 5, "sunday": 6
@@ -28,26 +31,24 @@ def parse(s: str, today: Optional[date] = None) -> date:
             return ref_date + timedelta(days=days_ahead)
 
     # 3. Handle complex math (e.g., '5 days before...')
-    # Normalizing 'after yesterday' helps bypass leap-day ambiguity
     s_clean = s_lower.replace("after yesterday", "from now")
     keywords = r"\b(before|after|from)\b"
-    
+
     if re.search(r"\d+", s_clean) and re.search(keywords, s_clean):
         parts = re.split(keywords, s_clean, maxsplit=1)
         if len(parts) == 3:
             offset_side, direction, base_side = parts
             direction = direction.strip()
-            
+
             matches = re.findall(r"(\d+)\s+(year|month|week|day)s?", offset_side)
             base_dt = dateparser.parse(base_side.strip(), settings={"RELATIVE_BASE": ref_dt})
-            
+
             if matches and base_dt:
                 delta = relativedelta()
                 for val, unit in matches:
                     u = unit + "s"
-                    # Fixed for Mypy error shown in image_cc5b9a.png
                     delta += relativedelta(**{u: int(val)})  # type: ignore[arg-type]
-                
+
                 res = (base_dt - delta) if direction == "before" else (base_dt + delta)
                 return res.date()
 
