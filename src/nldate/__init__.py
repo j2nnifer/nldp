@@ -15,7 +15,7 @@ def parse(s: str, today: Optional[date] = None) -> date:
     ref_dt = datetime.combine(ref_date, datetime.min.time())
     s_lower = s.lower().strip()
 
-    # 1. Bulletproof Weekday Math (fixes 'next Friday', 'last Monday', etc.)
+    # 1. Weekday Math (Fixed to "Soonest" logic to match image_cc4bf9.png)
     weekdays = {
         "monday": 0,
         "tuesday": 1,
@@ -32,17 +32,13 @@ def parse(s: str, today: Optional[date] = None) -> date:
         target_idx = weekdays[words[1]]
         current_idx = ref_date.weekday()
 
-        # Calculate days until the next occurrence of that weekday
         days_ahead = (target_idx - current_idx) % 7
         if days_ahead == 0:
             days_ahead = 7
 
         if modifier == "next":
-            # Autograders generally expect "next" to mean the following week
-            # if the day is coming up very soon, but just jumping to the next
-            # instance is the safest general baseline.
-            # *If* this fails, change the 7 to a 0.
-            return ref_date + timedelta(days=days_ahead + 7)
+            # Returns the soonest Tuesday (e.g., Mon 20th -> Tue 21st)
+            return ref_date + timedelta(days=days_ahead)
         elif modifier == "this":
             return ref_date + timedelta(days=days_ahead)
         elif modifier == "last":
@@ -70,18 +66,18 @@ def parse(s: str, today: Optional[date] = None) -> date:
                 delta = relativedelta()
                 for val, unit in matches:
                     u = unit + "s"
-                    delta += relativedelta(**{u: int(val)})  # type: ignore[arg-type]
+                    # type: ignore[arg-type]
+                    delta += relativedelta(**{u: int(val)})
 
                 res = (base_dt - delta) if direction == "before" else (base_dt + delta)
                 return res.date()
 
-    # 3. parsedatetime for natural English relative dates (tomorrow, yesterday)
+    # 3. Fallbacks for general natural language
     cal = parsedatetime.Calendar()
     time_struct, parse_status = cal.parse(s, ref_dt)
     if parse_status > 0:
         return date(*time_struct[:3])
 
-    # 4. dateparser as an absolute date fallback
     dt = dateparser.parse(
         s, settings={"RELATIVE_BASE": ref_dt, "PREFER_DATES_FROM": "future"}
     )
