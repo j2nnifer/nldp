@@ -1,0 +1,25 @@
+[project]
+name = "nldp"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "j2nnifer", email = "jekuei@ucsd.edu" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "dateparser>=1.4.0",
+    "parsedatetime>=2.6",
+    "python-dateutil>=2.9.0.post0",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.11,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "mypy>=2.1.0",
+    "pytest>=9.0.3",
+    "ruff>=0.15.12",
+]
