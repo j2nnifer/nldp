@@ -9,7 +9,7 @@ from dateutil.relativedelta import relativedelta
 
 def parse(s: str, today: Optional[date] = None) -> date:
     """
-    Parses natural language into a date using cumulative delta logic.
+    Parses natural language into a date using stable cumulative delta logic.
     """
     # 1. Reference point setup
     ref_date = today if today else date.today()
@@ -42,7 +42,7 @@ def parse(s: str, today: Optional[date] = None) -> date:
             return ref_date - timedelta(days=back)
 
     # 3. Cumulative Relative Math
-    # We identify the 'anchor shift' separately to prevent leap-day/month-end drift.
+    # Extract 'anchor shifts' (yesterday/tomorrow) as raw deltas first
     anchor_shift = relativedelta()
     s_temp = s_lower
     if "yesterday" in s_temp:
@@ -66,12 +66,22 @@ def parse(s: str, today: Optional[date] = None) -> date:
             )
 
             if anchor_dt is not None:
-                matches = re.findall(r"(\d+)\s+(year|month|week|day)s?", offset_part)
+                # Recognizes "the" or "a" as 1 to handle idioms like "the day after"
+                matches = re.findall(
+                    r"(?:(\d+)|(the|a))\s+(year|month|week|day)s?", offset_part
+                )
                 if matches:
-                    delta_args = {f"{u}s": int(v) for v, u in matches}
+                    # Added explicit type annotation to fix the error in image_b101bd.png
+                    delta_args: dict[str, int] = {}
+                    for num, article, unit in matches:
+                        count = int(num) if num else 1
+                        unit_key = f"{unit}s"
+                        delta_args[unit_key] = delta_args.get(unit_key, 0) + count
+
+                    # Unpacking with type: ignore handles Mypy's kwarg restriction
                     offset_delta = relativedelta(**delta_args)  # type: ignore[arg-type]
 
-                    # Combine the offset with the yesterday/tomorrow shift
+                    # Algebraically combine the offset with the yesterday/tomorrow shift
                     if rel == "before":
                         total_delta = anchor_shift - offset_delta
                     else:
@@ -80,10 +90,10 @@ def parse(s: str, today: Optional[date] = None) -> date:
                     return (anchor_dt + total_delta).date()
 
     # 4. Fallbacks
+    # Use context style and accuracy check to handle pdtContext objects properly
     cal = parsedatetime.Calendar(version=parsedatetime.VERSION_CONTEXT_STYLE)
     time_struct, status = cal.parse(s, ref_dt)
 
-    # Use accuracy to avoid the TypeError found in image_b11c3b.png
     if status.accuracy > 0:
         return date(*time_struct[:3])
 
