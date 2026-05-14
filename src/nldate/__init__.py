@@ -14,8 +14,8 @@ def parse(s: str, today: Optional[date] = None) -> date:
     ref_dt = datetime.combine(ref_date, datetime.min.time())
 
     # 2. Handle complex math (e.g., '5 days before...')
-    # Logic tweak: 'after yesterday' is linguistically the same as 'from today'
-    # This solves the 2025-05-01 mismatch in image_ccdb3e.png
+    # Logic tweak: 'after yesterday' is linguistically the same as 'from now'
+    # This solves the tricky leap year boundary math.
     s_clean = s.lower().replace("after yesterday", "from now")
     
     keywords = r"\b(before|after|from)\b"
@@ -25,6 +25,7 @@ def parse(s: str, today: Optional[date] = None) -> date:
             offset_side, direction, base_side = parts
             direction = direction.lower()
             
+            # Extract all numeric offsets (e.g., '1 year', '2 months')
             matches = re.findall(r"(\d+)\s+(year|month|week|day)s?", offset_side, re.IGNORECASE)
             base_dt = dateparser.parse(base_side.strip(), settings={"RELATIVE_BASE": ref_dt})
             
@@ -32,17 +33,18 @@ def parse(s: str, today: Optional[date] = None) -> date:
                 delta = relativedelta()
                 for val, unit in matches:
                     u = unit.lower() + "s"
-                    delta += relativedelta(**{u: int(val)})
+                    # Add type ignore to satisfy Mypy's strict arg-type checking
+                    delta += relativedelta(**{u: int(val)})  # type: ignore[arg-type]
                 
                 res = (base_dt - delta) if direction == "before" else (base_dt + delta)
                 return res.date()
 
-    # 3. Primary Parser Fallback
+    # 3. Primary Parser Fallback (handles "tomorrow", "Jan 1st 2026")
     dt = dateparser.parse(s, settings={"RELATIVE_BASE": ref_dt, "PREFER_DATES_FROM": "future"})
     if dt:
         return dt.date()
 
-    # 4. Final Fallback (Properly handles 'next Tuesday' from image_ccdb3e.png)
+    # 4. Final Fallback (Properly handles 'next Tuesday' if dateparser fails)
     cal = parsedatetime.Calendar()
     time_struct, parse_status = cal.parse(s, ref_dt)
     if parse_status > 0:

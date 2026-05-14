@@ -1,6 +1,6 @@
 from datetime import date
 import pytest
-from nldp import parse
+from nldate import parse
 
 @pytest.mark.parametrize("input_str, ref, expected", [
     ("December 1st, 2025", None, date(2025, 12, 1)),
