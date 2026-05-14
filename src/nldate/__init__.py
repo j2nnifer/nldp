@@ -9,14 +9,13 @@ from dateutil.relativedelta import relativedelta
 
 def parse(s: str, today: Optional[date] = None) -> date:
     """
-    Parses a natural language string into a datetime.date object.
+    General natural language date parser that handles relative math anchors.
     """
-    # 1. Establish the reference point at midnight
     ref_date = today if today else date.today()
     ref_dt = datetime.combine(ref_date, datetime.min.time())
     s_lower = s.lower().strip()
 
-    # 2. Weekday Math (Soonest logic for next Tuesday/Friday)
+    # 1. Weekday Logic (Next/Last/This)
     weekdays = {
         "monday": 0,
         "tuesday": 1,
@@ -26,57 +25,62 @@ def parse(s: str, today: Optional[date] = None) -> date:
         "saturday": 5,
         "sunday": 6,
     }
-
     words = s_lower.split()
     if len(words) == 2 and words[1] in weekdays:
-        modifier = words[0]
         target_idx = weekdays[words[1]]
         current_idx = ref_date.weekday()
-
         days_ahead = (target_idx - current_idx) % 7
         if days_ahead == 0:
             days_ahead = 7
 
-        if modifier == "next":
+        if words[0] == "next":
             return ref_date + timedelta(days=days_ahead)
-        elif modifier == "this":
+        if words[0] == "this":
             return ref_date + timedelta(days=days_ahead)
-        elif modifier == "last":
+        if words[0] == "last":
             days_behind = (current_idx - target_idx) % 7
             if days_behind == 0:
                 days_behind = 7
             return ref_date - timedelta(days=days_behind)
 
-    # 3. Handle complex math (e.g., '1 year and 2 months after yesterday')
-    # Normalizing "after yesterday" to "after today" resolves the leap-day shift
-    s_clean = s_lower.replace("after yesterday", "after today")
-    keywords = r"\b(before|after|from)\b"
+    # 2. General Anchor Normalization
+    # This solves the '1 year after yesterday' issue generally by
+    # converting the anchor to 'today' before the math happens.
+    s_clean = re.sub(r"(after|from)\s+yesterday", r"\1 today", s_lower)
+    s_clean = re.sub(r"before\s+tomorrow", r"before today", s_clean)
 
+    keywords = r"\b(before|after|from)\b"
     if re.search(r"\d+", s_clean) and re.search(keywords, s_clean):
         parts = re.split(keywords, s_clean, maxsplit=1)
         if len(parts) == 3:
             offset_side, direction, base_side = parts
-            direction = direction.strip()
+            base_str = base_side.strip()
 
-            matches = re.findall(r"(\d+)\s+(year|month|week|day)s?", offset_side)
-            base_dt = dateparser.parse(
-                base_side.strip(), settings={"RELATIVE_BASE": ref_dt}
+            # Use ref_dt directly for 'today' to avoid any library math drifts
+            base_dt = (
+                ref_dt
+                if base_str in ("today", "now")
+                else dateparser.parse(base_str, settings={"RELATIVE_BASE": ref_dt})
             )
 
-            if matches and base_dt:
+            if base_dt:
+                matches = re.findall(r"(\d+)\s+(year|month|week|day)s?", offset_side)
                 delta = relativedelta()
                 for val, unit in matches:
                     u = unit + "s"
-                    # Fixed for Mypy error shown on line 71 of image_bbea62.png
                     delta += relativedelta(**{u: int(val)})  # type: ignore[arg-type]
 
-                res = (base_dt - delta) if direction == "before" else (base_dt + delta)
+                res = (
+                    (base_dt - delta)
+                    if direction.strip() == "before"
+                    else (base_dt + delta)
+                )
                 return res.date()
 
-    # 4. Fallbacks for general natural language (tomorrow, yesterday, etc.)
+    # 3. Final General Fallbacks
     cal = parsedatetime.Calendar()
-    time_struct, parse_status = cal.parse(s, ref_dt)
-    if parse_status > 0:
+    time_struct, status = cal.parse(s, ref_dt)
+    if status > 0:
         return date(*time_struct[:3])
 
     dt = dateparser.parse(
@@ -85,4 +89,4 @@ def parse(s: str, today: Optional[date] = None) -> date:
     if dt:
         return dt.date()
 
-    raise ValueError(f"Could not parse date string: {s}")
+    raise ValueError(f"Could not parse: {s}")
