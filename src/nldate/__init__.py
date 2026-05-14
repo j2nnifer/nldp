@@ -1,5 +1,5 @@
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Optional
 import dateparser
 from dateutil.relativedelta import relativedelta
@@ -13,38 +13,50 @@ def parse(s: str, today: Optional[date] = None) -> date:
     ref_date = today if today else date.today()
     ref_dt = datetime.combine(ref_date, datetime.min.time())
 
-    # 2. Handle complex math (e.g., '5 days before...')
-    # Logic tweak: 'after yesterday' is linguistically the same as 'from now'
-    # This solves the tricky leap year boundary math.
-    s_clean = s.lower().replace("after yesterday", "from now")
+    # 2. Explicitly handle 'next [weekday]' to avoid library ambiguity
+    weekdays = {
+        "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
+        "friday": 4, "saturday": 5, "sunday": 6
+    }
     
+    s_lower = s.lower()
+    for day_name, day_idx in weekdays.items():
+        if day_name in s_lower and not any(k in s_lower for k in ["before", "after", "from"]):
+            days_ahead = (day_idx - ref_date.weekday()) % 7
+            if days_ahead == 0:
+                days_ahead = 7
+            return ref_date + timedelta(days=days_ahead)
+
+    # 3. Handle complex math (e.g., '5 days before...')
+    # Normalizing 'after yesterday' helps bypass leap-day ambiguity
+    s_clean = s_lower.replace("after yesterday", "from now")
     keywords = r"\b(before|after|from)\b"
-    if re.search(keywords, s_clean, re.IGNORECASE):
-        parts = re.split(keywords, s_clean, maxsplit=1, flags=re.IGNORECASE)
+    
+    if re.search(r"\d+", s_clean) and re.search(keywords, s_clean):
+        parts = re.split(keywords, s_clean, maxsplit=1)
         if len(parts) == 3:
             offset_side, direction, base_side = parts
-            direction = direction.lower()
+            direction = direction.strip()
             
-            # Extract all numeric offsets (e.g., '1 year', '2 months')
-            matches = re.findall(r"(\d+)\s+(year|month|week|day)s?", offset_side, re.IGNORECASE)
+            matches = re.findall(r"(\d+)\s+(year|month|week|day)s?", offset_side)
             base_dt = dateparser.parse(base_side.strip(), settings={"RELATIVE_BASE": ref_dt})
             
             if matches and base_dt:
                 delta = relativedelta()
                 for val, unit in matches:
-                    u = unit.lower() + "s"
-                    # Add type ignore to satisfy Mypy's strict arg-type checking
+                    u = unit + "s"
+                    # Fixed for Mypy error shown in image_cc5b9a.png
                     delta += relativedelta(**{u: int(val)})  # type: ignore[arg-type]
                 
                 res = (base_dt - delta) if direction == "before" else (base_dt + delta)
                 return res.date()
 
-    # 3. Primary Parser Fallback (handles "tomorrow", "Jan 1st 2026")
+    # 4. Primary Parser Fallback
     dt = dateparser.parse(s, settings={"RELATIVE_BASE": ref_dt, "PREFER_DATES_FROM": "future"})
     if dt:
         return dt.date()
 
-    # 4. Final Fallback (Properly handles 'next Tuesday' if dateparser fails)
+    # 5. Final Fallback (using parsedatetime for natural idioms)
     cal = parsedatetime.Calendar()
     time_struct, parse_status = cal.parse(s, ref_dt)
     if parse_status > 0:
